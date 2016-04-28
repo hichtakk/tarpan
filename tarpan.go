@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kr/pretty"
 	"github.com/soniah/gosnmp"
 )
 
@@ -102,12 +101,7 @@ type Channels struct {
 
 func (t *TarpanManager) Get(params map[string]string,
 	oids []string) ([]gosnmp.SnmpPDU, error) {
-	log.Println("Get:", params)
-	log.Println("Tm Address:", &t)
-	log.Println("TmSNMP Address:", &t.snmp)
-	log.Printf("Before Set Tarpan %# v", pretty.Formatter(t.snmp))
 	t.SetParams(params)
-	log.Printf("Afer Set Tarpan %# v", pretty.Formatter(t.snmp))
 	connection_err := t.snmp.Connect()
 	if connection_err != nil {
 		log.Fatalf("Connection error: %")
@@ -123,9 +117,8 @@ func (t *TarpanManager) Get(params map[string]string,
 }
 
 func (t *TarpanManager) SetManager(manager *gosnmp.GoSNMP) {
-	log.Println("Before Tm Address:", &t.snmp)
 	t.snmp = manager
-	log.Println("After Tm Address:", &t.snmp)
+
 	return
 }
 
@@ -257,36 +250,23 @@ func Collect(dataset *DataSet) []*TarpanResult {
 
 	channels = makeChannel(len(dataset.Targets))
 	for index := range dataset.Targets {
-		//tm = TarpanManager{}
-		//tm.SetManager(new(gosnmp.GoSNMP))
 
 		// TODO: split oid slice according to PDU size
 		oids = []string{}
 		for oid_idx := range dataset.Targets[index].OIDs {
 			oids = append(oids, dataset.Targets[index].OIDs[oid_idx].OID)
 		}
-		log.Print("OIDS:", oids)
 
 		waitGroup.Add(1)
 		go func(ds *DataSet, idx int, o []string, c *Channels) {
-			/*
-				tm = TarpanManager{}
-				fmt.Println("HOGE", tm)
-				log.Println("KOKO Tm Address:", &tm.snmp)
-				log.Println("KOKO Tm Address:", tm.snmp)
-				tm.SetManager(new(gosnmp.GoSNMP))
-				log.Println("KOKO Tm Address:", tm.snmp)
-			*/
 			c.semaphoe <- 0
 			req_body, req_body_err := makeRequestBody(ds, idx)
-			log.Print(req_body)
 			if req_body_err != nil {
 				log.Print(req_body_err)
 				<-c.semaphoe
 				return
 			}
 			t := time.Now()
-			//results, err := tm.Get(req_body, o)
 			results, err := managers[idx].Get(req_body, o)
 			if err != nil {
 				log.Print(err)
