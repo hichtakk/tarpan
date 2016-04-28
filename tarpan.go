@@ -1,12 +1,14 @@
 package tarpan
 
 import (
+	"errors"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/kr/pretty"
 	"github.com/soniah/gosnmp"
 )
 
@@ -79,7 +81,7 @@ type Tarpan interface {
 	makeRequestBody()
 	SetManager()
 	SetParams()
-	Get(params map[string]string, oids []string) []gosnmp.SnmpPDU
+	Get(params map[string]string, oids []string) ([]gosnmp.SnmpPDU, error)
 	Run()
 }
 
@@ -99,23 +101,31 @@ type Channels struct {
 }
 
 func (t *TarpanManager) Get(params map[string]string,
-	oids []string) []gosnmp.SnmpPDU {
+	oids []string) ([]gosnmp.SnmpPDU, error) {
+	log.Println("Get:", params)
+	log.Println("Tm Address:", &t)
+	log.Println("TmSNMP Address:", &t.snmp)
+	log.Printf("Before Set Tarpan %# v", pretty.Formatter(t.snmp))
 	t.SetParams(params)
+	log.Printf("Afer Set Tarpan %# v", pretty.Formatter(t.snmp))
 	connection_err := t.snmp.Connect()
 	if connection_err != nil {
 		log.Fatalf("Connection error: %")
+		return nil, errors.New(connection_err.Error())
 	}
 	result, request_err := t.snmp.Get(oids)
 	if request_err != nil {
-		log.Println("Get() error: %v", request_err)
+		return nil, errors.New(request_err.Error())
 	}
 	t.snmp.Conn.Close()
 
-	return result.Variables
+	return result.Variables, nil
 }
 
 func (t *TarpanManager) SetManager(manager *gosnmp.GoSNMP) {
+	log.Println("Before Tm Address:", &t.snmp)
 	t.snmp = manager
+	log.Println("After Tm Address:", &t.snmp)
 	return
 }
 
@@ -170,10 +180,16 @@ func makeRequestBody(ds *DataSet, idx int) (map[string]string, error) {
 	if version == "" {
 		version = ds.Default.Version
 	}
+	port := ds.Targets[idx].Port
+	if port == 0 {
+		port = ds.Default.Port
+	}
+
 	request_body := map[string]string{
 		"target":    address,
 		"community": community,
 		"version":   version,
+		"port":      strconv.Itoa(int(port)),
 	}
 
 	return request_body, err
@@ -228,35 +244,56 @@ func makeTarpanResult(c *Channels) []*TarpanResult {
 
 func Collect(dataset *DataSet) []*TarpanResult {
 	var waitGroup sync.WaitGroup
-	var managers []TarpanManager
-	var tm TarpanManager
+	var managers []*TarpanManager
+	//var tm TarpanManager
 	var channels *Channels
 	var oids []string
 
+	for i := 0; i < len(dataset.Targets); i++ {
+		managers = append(managers, &TarpanManager{
+			snmp: &gosnmp.GoSNMP{},
+		})
+	}
+
 	channels = makeChannel(len(dataset.Targets))
 	for index := range dataset.Targets {
-		tm = TarpanManager{}
-		tm.SetManager(new(gosnmp.GoSNMP))
-		managers = append(managers, tm)
+		//tm = TarpanManager{}
+		//tm.SetManager(new(gosnmp.GoSNMP))
 
 		// TODO: split oid slice according to PDU size
 		oids = []string{}
 		for oid_idx := range dataset.Targets[index].OIDs {
 			oids = append(oids, dataset.Targets[index].OIDs[oid_idx].OID)
 		}
+		log.Print("OIDS:", oids)
 
 		waitGroup.Add(1)
 		go func(ds *DataSet, idx int, o []string, c *Channels) {
+			/*
+				tm = TarpanManager{}
+				fmt.Println("HOGE", tm)
+				log.Println("KOKO Tm Address:", &tm.snmp)
+				log.Println("KOKO Tm Address:", tm.snmp)
+				tm.SetManager(new(gosnmp.GoSNMP))
+				log.Println("KOKO Tm Address:", tm.snmp)
+			*/
 			c.semaphoe <- 0
 			req_body, req_body_err := makeRequestBody(ds, idx)
+			log.Print(req_body)
 			if req_body_err != nil {
 				log.Print(req_body_err)
 				<-c.semaphoe
 				return
 			}
 			t := time.Now()
-			//results := tm.Get(req_body, o)
-			results := managers[index].Get(req_body, o)
+			//results, err := tm.Get(req_body, o)
+			results, err := managers[idx].Get(req_body, o)
+			if err != nil {
+				log.Print(err)
+				<-c.semaphoe
+				waitGroup.Done()
+				return
+			}
 			ret := SnmpResult{
 				target:  ds.Targets[idx],
 				results: results,
