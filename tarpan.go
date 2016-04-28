@@ -259,6 +259,7 @@ func Collect(dataset *DataSet) []*TarpanResult {
 
 		waitGroup.Add(1)
 		go func(ds *DataSet, idx int, o []string, c *Channels) {
+			defer waitGroup.Done()
 			c.semaphoe <- 0
 			req_body, req_body_err := makeRequestBody(ds, idx)
 			if req_body_err != nil {
@@ -281,7 +282,6 @@ func Collect(dataset *DataSet) []*TarpanResult {
 			}
 			c.results <- ret
 			<-c.semaphoe
-			waitGroup.Done()
 		}(dataset, index, oids, channels)
 	}
 	waitGroup.Wait()
