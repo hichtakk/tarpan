@@ -212,7 +212,6 @@ func makeTarpanResult(c *Channels) []*TarpanResult {
 				}
 			}
 		}
-		log.Println(result.target)
 		tr := &TarpanResult{
 			Name:      result.target.Name,
 			Address:   result.target.Address,
