@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/codegangsta/cli"
 	"github.com/soniah/gosnmp"
 )
 
