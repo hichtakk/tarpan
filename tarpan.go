@@ -228,6 +228,7 @@ func makeTarpanResult(c *Channels) []*TarpanResult {
 
 func Collect(dataset *DataSet) []*TarpanResult {
 	var waitGroup sync.WaitGroup
+	var managers []TarpanManager
 	var tm TarpanManager
 	var channels *Channels
 	var oids []string
@@ -236,6 +237,7 @@ func Collect(dataset *DataSet) []*TarpanResult {
 	for index := range dataset.Targets {
 		tm = TarpanManager{}
 		tm.SetManager(new(gosnmp.GoSNMP))
+		managers = append(managers, tm)
 
 		// TODO: split oid slice according to PDU size
 		oids = []string{}
@@ -253,7 +255,8 @@ func Collect(dataset *DataSet) []*TarpanResult {
 				return
 			}
 			t := time.Now()
-			results := tm.Get(req_body, o)
+			//results := tm.Get(req_body, o)
+			results := managers[index].Get(req_body, o)
 			ret := SnmpResult{
 				target:  ds.Targets[idx],
 				results: results,
