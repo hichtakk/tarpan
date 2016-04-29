@@ -1,37 +1,27 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
-	"github.com/codegangsta/cli"
 	"github.com/hichtakk/tarpan"
+	"gopkg.in/alecthomas/kingpin.v2"
+)
+
+var (
+	debug  = kingpin.Flag("debug", "Set debug mode").Short('d').Bool()
+	output = kingpin.Flag("output", "output type").Short('o').String()
+	target = kingpin.Arg("target", "target json").Required().ExistingFile()
 )
 
 func main() {
-	app := cli.NewApp()
-	app.Name = "Tarpan"
-	app.Usage = "SNMP Manager"
-	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name: "target, t",
-			//Value: "./target.json",
-			Usage: "SNMP targets file",
-		},
-		cli.StringFlag{
-			Name:   "debug, d",
-			Usage:  "debug option",
-			EnvVar: "TARPAN_DEBUG",
-		},
+	kingpin.Parse()
+	if *debug == true {
+		fmt.Printf("debug: %v, target: %s, output: %s\n", *debug, *target, *output)
 	}
-	app.Action = func(c *cli.Context) {
-		if c.String("target") == "" {
-			println("target file not found")
-		} else {
-			tarpan.Run(c.String("target"))
-		}
-
-		return
+	exit, err := tarpan.Run(*target, *output, *debug)
+	if err != nil {
+		fmt.Println("hoge")
 	}
-
-	app.Run(os.Args)
+	os.Exit(exit)
 }

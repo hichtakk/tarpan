@@ -301,7 +301,7 @@ func Collect(dataset *DataSet) []*TarpanResult {
 	return tr
 }
 
-func Run(target string) (int, error) {
+func Run(target string, output string, debug bool) (int, error) {
 	var err error
 
 	// Load targets
@@ -314,7 +314,7 @@ func Run(target string) (int, error) {
 	tr := Collect(dataset)
 
 	// output
-	Write("aa", tr)
+	Write(output, tr)
 
 	return ExitCodeOK, err
 }
