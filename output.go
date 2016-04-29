@@ -10,12 +10,11 @@ import (
 func Write(outtype string, tr []*TarpanResult) {
 	switch outtype {
 	case "json":
-		defaultWriter(tr)
+		jsonWriter(tr)
 	case "sensu":
 		sensuWriter(tr)
 	default:
-		//defaultWriter(tr)
-		jsonWriter(tr)
+		defaultWriter(tr)
 	}
 }
 
