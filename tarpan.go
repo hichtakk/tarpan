@@ -251,7 +251,6 @@ func getTargetOIDDescription(oid string, oids []OID) (string, error) {
 func Collect(dataset *DataSet) []*TarpanResult {
 	var waitGroup sync.WaitGroup
 	var managers []*TarpanManager
-	//var tm TarpanManager
 	var channels *Channels
 	var oids []string
 
