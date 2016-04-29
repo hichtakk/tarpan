@@ -205,22 +205,7 @@ func makeTarpanResult(c *Channels) []*TarpanResult {
 	for i := 0; i < length; i++ {
 		varbinds = []VarBind{}
 		result = <-c.results
-		for _, val := range result.results {
-			for _, o := range result.target.OIDs {
-				n := strings.TrimLeft(val.Name, ".")
-				if o.OID == n {
-					v := VarBind{
-						Description: o.Description,
-						OID:         val.Name,
-						Type:        val.Type,
-						Value:       val.Value,
-						Time:        result.time,
-					}
-					varbinds = append(varbinds, v)
-					break
-				}
-			}
-		}
+		varbinds = makeResultVarBinds(result)
 		tr := &TarpanResult{
 			Name:      result.target.Name,
 			Address:   result.target.Address,
@@ -233,6 +218,34 @@ func makeTarpanResult(c *Channels) []*TarpanResult {
 	}
 
 	return tarpanResults
+}
+
+func makeResultVarBinds(ret SnmpResult) []VarBind {
+	var varbinds []VarBind
+	for _, val := range ret.results {
+		n := strings.TrimLeft(val.Name, ".")
+		desc, _ := getTargetOIDDescription(n, ret.target.OIDs)
+		v := VarBind{
+			Description: desc,
+			OID:         val.Name,
+			Type:        val.Type,
+			Value:       val.Value,
+			Time:        ret.time,
+		}
+		varbinds = append(varbinds, v)
+	}
+
+	return varbinds
+}
+
+func getTargetOIDDescription(oid string, oids []OID) (string, error) {
+	for _, o := range oids {
+		if o.OID == oid {
+			return o.Description, nil
+		}
+	}
+
+	return "", errors.New("oid not found")
 }
 
 func Collect(dataset *DataSet) []*TarpanResult {
@@ -275,12 +288,11 @@ func Collect(dataset *DataSet) []*TarpanResult {
 				waitGroup.Done()
 				return
 			}
-			ret := SnmpResult{
+			c.results <- SnmpResult{
 				target:  ds.Targets[idx],
 				results: results,
 				time:    t.Unix(),
 			}
-			c.results <- ret
 			<-c.semaphoe
 		}(dataset, index, oids, channels)
 	}
