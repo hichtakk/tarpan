@@ -89,6 +89,7 @@ type TarpanManager struct {
 }
 
 type SnmpResult struct {
+	index   int
 	target  Target
 	results []gosnmp.SnmpPDU
 	time    int64
@@ -198,10 +199,10 @@ func makeChannel(result_buffer_length int) *Channels {
 }
 
 func makeTarpanResult(c *Channels) []*TarpanResult {
-	var tarpanResults []*TarpanResult
+	length := len(c.results)
+	tarpanResults := make([]*TarpanResult, length)
 	var varbinds []VarBind
 	var result SnmpResult
-	length := len(c.results)
 	for i := 0; i < length; i++ {
 		varbinds = []VarBind{}
 		result = <-c.results
@@ -214,10 +215,18 @@ func makeTarpanResult(c *Channels) []*TarpanResult {
 			Community: result.target.Community,
 			VarBinds:  varbinds,
 		}
-		tarpanResults = append(tarpanResults, tr)
+		tarpanResults[result.index] = tr
 	}
 
-	return tarpanResults
+	// remove error response
+	var ret []*TarpanResult
+	for _, v := range tarpanResults {
+		if v != nil {
+			ret = append(ret, v)
+		}
+	}
+
+	return ret
 }
 
 func makeResultVarBinds(ret SnmpResult) []VarBind {
@@ -284,10 +293,10 @@ func Collect(dataset *DataSet) []*TarpanResult {
 			if err != nil {
 				log.Print(err)
 				<-c.semaphoe
-				waitGroup.Done()
 				return
 			}
 			c.results <- SnmpResult{
+				index:   idx,
 				target:  ds.Targets[idx],
 				results: results,
 				time:    t.Unix(),
