@@ -158,8 +158,8 @@ func (t *TarpanManager) SetParams(p map[string]string) {
 	return
 }
 
-func makeRequestBody(ds *DataSet, idx int) (map[string]string, error) {
-	address := ""
+func getRequestParams(ds *DataSet, idx int) (map[string]string, error) {
+	var address string
 	err := validateIP(ds.Targets[idx].Address)
 	if err == nil {
 		address = ds.Targets[idx].Address
@@ -186,7 +186,7 @@ func makeRequestBody(ds *DataSet, idx int) (map[string]string, error) {
 		"port":      strconv.Itoa(int(port)),
 	}
 
-	return request_body, err
+	return request_body, nil
 }
 
 func makeChannel(result_buffer_length int) *Channels {
@@ -282,7 +282,7 @@ func Collect(dataset *DataSet) []*TarpanResult {
 		go func(ds *DataSet, idx int, o []string, c *Channels) {
 			defer waitGroup.Done()
 			c.semaphoe <- 0
-			req_body, req_body_err := makeRequestBody(ds, idx)
+			req_body, req_body_err := getRequestParams(ds, idx)
 			if req_body_err != nil {
 				log.Print(req_body_err)
 				<-c.semaphoe
