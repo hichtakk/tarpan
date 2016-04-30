@@ -189,10 +189,10 @@ func getRequestParams(ds *DataSet, idx int) (map[string]string, error) {
 	return request_body, nil
 }
 
-func makeChannel(result_buffer_length int) *Channels {
+func makeChannel(result_buffer_sizeh int) *Channels {
 	channel := &Channels{
 		semaphoe: make(chan int, ConcurrentProcesses),
-		results:  make(chan SnmpResult, result_buffer_length),
+		results:  make(chan SnmpResult, result_buffer_size),
 	}
 
 	return channel
