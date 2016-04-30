@@ -119,8 +119,6 @@ func (t *TarpanManager) Get(params map[string]string,
 
 func (t *TarpanManager) SetManager(manager *gosnmp.GoSNMP) {
 	t.snmp = manager
-
-	return
 }
 
 func (t *TarpanManager) SetParams(p map[string]string) {
@@ -154,8 +152,6 @@ func (t *TarpanManager) SetParams(p map[string]string) {
 		t.snmp.Retries = retry
 
 	}
-
-	return
 }
 
 func getRequestParams(ds *DataSet, idx int) (map[string]string, error) {
@@ -189,7 +185,7 @@ func getRequestParams(ds *DataSet, idx int) (map[string]string, error) {
 	return request_body, nil
 }
 
-func makeChannel(result_buffer_sizeh int) *Channels {
+func makeChannel(result_buffer_size int) *Channels {
 	channel := &Channels{
 		semaphoe: make(chan int, ConcurrentProcesses),
 		results:  make(chan SnmpResult, result_buffer_size),
@@ -198,53 +194,54 @@ func makeChannel(result_buffer_sizeh int) *Channels {
 	return channel
 }
 
-func makeTarpanResult(c *Channels) []*TarpanResult {
-	length := len(c.results)
-	tarpanResults := make([]*TarpanResult, length)
+func makeTarpanResult(result SnmpResult) *TarpanResult {
 	var varbinds []VarBind
-	var result SnmpResult
-	for i := 0; i < length; i++ {
-		varbinds = []VarBind{}
-		result = <-c.results
-		varbinds = makeResultVarBinds(result)
-		tr := &TarpanResult{
-			Name:      result.target.Name,
-			Address:   result.target.Address,
-			Port:      result.target.Port,
-			Version:   result.target.Version,
-			Community: result.target.Community,
-			VarBinds:  varbinds,
-		}
-		tarpanResults[result.index] = tr
-	}
-
-	// remove error response
-	var ret []*TarpanResult
-	for _, v := range tarpanResults {
-		if v != nil {
-			ret = append(ret, v)
-		}
-	}
-
-	return ret
-}
-
-func makeResultVarBinds(ret SnmpResult) []VarBind {
-	var varbinds []VarBind
-	for _, val := range ret.results {
+	for _, val := range result.results {
 		n := strings.TrimLeft(val.Name, ".")
-		desc, _ := getTargetOIDDescription(n, ret.target.OIDs)
+		desc, _ := getTargetOIDDescription(n, result.target.OIDs)
 		v := VarBind{
 			Description: desc,
 			OID:         val.Name,
 			Type:        val.Type,
 			Value:       val.Value,
-			Time:        ret.time,
+			Time:        result.time,
 		}
 		varbinds = append(varbinds, v)
 	}
 
-	return varbinds
+	tarpanResult := &TarpanResult{
+		Name:      result.target.Name,
+		Address:   result.target.Address,
+		Port:      result.target.Port,
+		Version:   result.target.Version,
+		Community: result.target.Community,
+		VarBinds:  varbinds,
+	}
+
+	return tarpanResult
+}
+
+func removeNilResult(tarpanResults []*TarpanResult) []*TarpanResult {
+	var responseResult []*TarpanResult
+	for _, v := range tarpanResults {
+		if v != nil {
+			responseResult = append(responseResult, v)
+		}
+	}
+
+	return responseResult
+}
+
+func makeTarpanResults(c *Channels) []*TarpanResult {
+	result_length := len(c.results)
+	tarpanResults := make([]*TarpanResult, result_length)
+	var result SnmpResult
+	for i := 0; i < result_length; i++ {
+		result = <-c.results
+		tarpanResults[result.index] = makeTarpanResult(result)
+	}
+
+	return removeNilResult(tarpanResults)
 }
 
 func getTargetOIDDescription(oid string, oids []OID) (string, error) {
@@ -305,7 +302,7 @@ func Collect(dataset *DataSet) []*TarpanResult {
 		}(dataset, index, oids, channels)
 	}
 	waitGroup.Wait()
-	tr := makeTarpanResult(channels)
+	tr := makeTarpanResults(channels)
 
 	return tr
 }
