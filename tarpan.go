@@ -4,7 +4,7 @@ import (
 	"errors"
 	"log"
 	"strconv"
-	"strings"
+	//"strings"
 	"sync"
 	"time"
 
@@ -87,6 +87,8 @@ type Tarpan interface {
 type TarpanManager struct {
 	snmp *gosnmp.GoSNMP
 }
+
+type TarpanManagers []*TarpanManager
 
 type SnmpResult struct {
 	index   int
@@ -194,11 +196,21 @@ func makeChannel(result_buffer_size int) *Channels {
 	return channel
 }
 
+func getTargetOIDDescription(oid string, oids []OID) (string, error) {
+	for _, o := range oids {
+		if o.OID == oid {
+			return o.Description, nil
+		}
+	}
+
+	return "", errors.New("oid not found")
+}
+
 func makeTarpanResult(result SnmpResult) *TarpanResult {
 	var varbinds []VarBind
 	for _, val := range result.results {
-		n := strings.TrimLeft(val.Name, ".")
-		desc, _ := getTargetOIDDescription(n, result.target.OIDs)
+		//n := strings.TrimLeft(val.Name, ".")
+		desc, _ := getTargetOIDDescription(val.Name, result.target.OIDs)
 		v := VarBind{
 			Description: desc,
 			OID:         val.Name,
@@ -208,7 +220,6 @@ func makeTarpanResult(result SnmpResult) *TarpanResult {
 		}
 		varbinds = append(varbinds, v)
 	}
-
 	tarpanResult := &TarpanResult{
 		Name:      result.target.Name,
 		Address:   result.target.Address,
@@ -244,52 +255,50 @@ func makeTarpanResults(c *Channels) []*TarpanResult {
 	return removeNilResult(tarpanResults)
 }
 
-func getTargetOIDDescription(oid string, oids []OID) (string, error) {
-	for _, o := range oids {
-		if o.OID == oid {
-			return o.Description, nil
-		}
-	}
-
-	return "", errors.New("oid not found")
-}
-
-func Collect(dataset *DataSet) []*TarpanResult {
-	var waitGroup sync.WaitGroup
+func makeManagers(numberOfTargets int) []*TarpanManager {
 	var managers []*TarpanManager
-	var channels *Channels
-	var oids []string
-
-	for i := 0; i < len(dataset.Targets); i++ {
+	for i := 0; i < numberOfTargets; i++ {
 		managers = append(managers, &TarpanManager{
 			snmp: &gosnmp.GoSNMP{},
 		})
 	}
 
-	channels = makeChannel(len(dataset.Targets))
-	for index := range dataset.Targets {
+	return managers
+}
 
-		// TODO: split oid slice according to PDU size
+func Collect(dataset *DataSet) []*TarpanResult {
+	var waitGroup sync.WaitGroup
+	var oids []string
+
+	managers := makeManagers(len(dataset.Targets))
+	channels := makeChannel(len(dataset.Targets))
+	for t_idx := range dataset.Targets {
+
+		// TODO: split oid slice depending on PDU size
 		oids = []string{}
-		for oid_idx := range dataset.Targets[index].OIDs {
-			oids = append(oids, dataset.Targets[index].OIDs[oid_idx].OID)
+		for o_idx := range dataset.Targets[t_idx].OIDs {
+			oids = append(oids, dataset.Targets[t_idx].OIDs[o_idx].OID)
 		}
 
 		waitGroup.Add(1)
-		go func(ds *DataSet, idx int, o []string, c *Channels) {
-			defer waitGroup.Done()
-			c.semaphoe <- 0
-			req_body, req_body_err := getRequestParams(ds, idx)
-			if req_body_err != nil {
-				log.Print(req_body_err)
+		go func(m *TarpanManager, ds *DataSet, idx int, o []string, c *Channels) {
+			//defer waitGroup.Done()
+			defer func() {
+				waitGroup.Done()
 				<-c.semaphoe
+			}()
+			c.semaphoe <- 0
+			param, param_err := getRequestParams(ds, idx)
+			if param_err != nil {
+				log.Print(param_err)
+				//<-c.semaphoe
 				return
 			}
+			results, err := m.Get(param, o)
 			t := time.Now()
-			results, err := managers[idx].Get(req_body, o)
 			if err != nil {
 				log.Print(err)
-				<-c.semaphoe
+				//<-c.semaphoe
 				return
 			}
 			c.results <- SnmpResult{
@@ -298,13 +307,13 @@ func Collect(dataset *DataSet) []*TarpanResult {
 				results: results,
 				time:    t.Unix(),
 			}
-			<-c.semaphoe
-		}(dataset, index, oids, channels)
+			//<-c.semaphoe
+		}(managers[t_idx], dataset, t_idx, oids, channels)
 	}
 	waitGroup.Wait()
-	tr := makeTarpanResults(channels)
+	tarpanResults := makeTarpanResults(channels)
 
-	return tr
+	return tarpanResults
 }
 
 func Run(target string, output string, debug bool) (int, error) {
