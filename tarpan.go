@@ -88,8 +88,6 @@ type TarpanManager struct {
 	snmp *gosnmp.GoSNMP
 }
 
-type TarpanManagers []*TarpanManager
-
 type SnmpResult struct {
 	index   int
 	target  Target
@@ -282,7 +280,6 @@ func Collect(dataset *DataSet) []*TarpanResult {
 
 		waitGroup.Add(1)
 		go func(m *TarpanManager, ds *DataSet, idx int, o []string, c *Channels) {
-			//defer waitGroup.Done()
 			defer func() {
 				waitGroup.Done()
 				<-c.semaphoe
@@ -291,14 +288,12 @@ func Collect(dataset *DataSet) []*TarpanResult {
 			param, param_err := getRequestParams(ds, idx)
 			if param_err != nil {
 				log.Print(param_err)
-				//<-c.semaphoe
 				return
 			}
 			results, err := m.Get(param, o)
 			t := time.Now()
 			if err != nil {
 				log.Print(err)
-				//<-c.semaphoe
 				return
 			}
 			c.results <- SnmpResult{
@@ -307,7 +302,6 @@ func Collect(dataset *DataSet) []*TarpanResult {
 				results: results,
 				time:    t.Unix(),
 			}
-			//<-c.semaphoe
 		}(managers[t_idx], dataset, t_idx, oids, channels)
 	}
 	waitGroup.Wait()
