@@ -71,11 +71,11 @@ type TarpanResult struct {
 type TarpanResults []*TarpanResult
 
 type VarBind struct {
-	Description string         `json:"description"`
-	OID         string         `json:"oid"`
-	Type        gosnmp.Asn1BER `json:"type"`
-	Value       interface{}    `json:"value"`
-	Time        int64          `json:"time"`
+	Description string      `json:"description"`
+	OID         string      `json:"oid"`
+	Type        string      `json:"type"`
+	Value       interface{} `json:"value"`
+	Time        int64       `json:"time"`
 }
 
 type Tarpan interface {
@@ -243,27 +243,18 @@ func (m *TarpanManager) makeTarpanResult(sp *gosnmp.SnmpPacket) TarpanResult {
 	for _, val := range sp.Variables {
 		//n := strings.TrimLeft(val.Name, ".")
 		desc, _ := m.getTargetOIDDescription(val.Name)
-		//asn1ber_name, _ := getAsn1BERName(val.Type)
+		asn1ber_name, _ := getAsn1BERName(val.Type)
+		//value := formatSnmpValue(val.Type, val.Value.(string))
 		v := VarBind{
 			Description: desc,
 			OID:         val.Name,
-			Type:        val.Type,
+			Type:        asn1ber_name,
 			Value:       val.Value,
 			Time:        now.Unix(),
 		}
 		varbinds = append(varbinds, v)
 	}
-	var version string
-	switch m.snmp.Version {
-	case gosnmp.Version1:
-		version = "1"
-	case gosnmp.Version2c:
-		version = "2c"
-	case gosnmp.Version3:
-		version = "3"
-	default:
-		version = ""
-	}
+	version := getSnmpVersionString(m.snmp.Version)
 	tarpanResult := TarpanResult{
 		Name:      m.target.Name,
 		Address:   m.target.Address,

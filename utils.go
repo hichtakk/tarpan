@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 
-	"github.com/soniah/gosnmp"
+	g "github.com/soniah/gosnmp"
 )
 
 // Utility functions
@@ -42,7 +42,23 @@ func validatePort(port uint16) (uint16, error) {
 	return port, nil
 }
 
-func getAsn1BERName(ber gosnmp.Asn1BER) (string, error) {
+func getSnmpVersionString(snmpVersion g.SnmpVersion) string {
+	var version string
+	switch snmpVersion {
+	case g.Version1:
+		version = "1"
+	case g.Version2c:
+		version = "2c"
+	case g.Version3:
+		version = "3"
+	default:
+		version = ""
+	}
+
+	return version
+}
+
+func getAsn1BERName(ber g.Asn1BER) (string, error) {
 	var name string
 	switch ber {
 	case 0x00:
@@ -84,8 +100,21 @@ func getAsn1BERName(ber gosnmp.Asn1BER) (string, error) {
 	case 0x82:
 		name = "EndOfMibView"
 	default:
-		return "", errors.New("unknown ber")
+		return "", errors.New("Unknown BER")
 	}
 
 	return name, nil
+}
+
+func formatSnmpValue(ber g.Asn1BER, value string) string {
+	switch ber {
+	case g.Counter32, g.Gauge32, g.Counter64:
+		return value
+	case g.NoSuchObject, g.NoSuchInstance:
+		return "-"
+	default:
+		return value
+	}
+
+	return ""
 }
