@@ -68,6 +68,8 @@ type TarpanResult struct {
 	VarBinds  []VarBind `json:"varbinds"`
 }
 
+type TarpanResults []*TarpanResult
+
 type VarBind struct {
 	Description string         `json:"description"`
 	OID         string         `json:"oid"`
@@ -85,54 +87,53 @@ type Tarpan interface {
 }
 
 type TarpanManager struct {
-	snmp *gosnmp.GoSNMP
+	target *Target
+	snmp   *gosnmp.GoSNMP
 }
+
+type TarpanManagers []*TarpanManager
 
 type RequestParams struct {
-	target    string
-	community string
-	version   string
-	port      string
-	timeout   uint8
-	retry     uint8
-}
-
-type SnmpResult struct {
-	index   int
-	target  Target
-	results []gosnmp.SnmpPDU
-	time    int64
+	managerIndex int
+	address      string
+	community    string
+	version      string
+	port         string
+	timeout      uint8
+	retry        uint8
 }
 
 type Channels struct {
 	semaphoe chan int
-	results  chan SnmpResult
+	results  chan TarpanResult
 }
 
-func (t *TarpanManager) Get(params *RequestParams,
-	oids []string) ([]gosnmp.SnmpPDU, error) {
-	t.SetParams(params)
-	connection_err := t.snmp.Connect()
-	defer t.snmp.Conn.Close()
+func (m *TarpanManager) setTarget(ds *DataSet, target_index int) error {
+	params, param_err := getRequestParams(ds, target_index)
+	if param_err != nil {
+		log.Print(param_err)
+		errors.New(param_err.Error())
+	}
+	m.SetParams(params)
+	m.target = &ds.Targets[target_index]
+
+	return nil
+}
+
+func (m *TarpanManager) Get(oids []string) (TarpanResult, error) {
+	connection_err := m.snmp.Connect()
+	defer m.snmp.Conn.Close()
 	if connection_err != nil {
 		log.Fatalf("Connection error: %")
-		return nil, errors.New(connection_err.Error())
+		return TarpanResult{}, errors.New(connection_err.Error())
 	}
-	snmpPacket, request_err := t.snmp.Get(oids)
+	snmpPacket, request_err := m.snmp.Get(oids)
 	if request_err != nil {
-		return nil, errors.New(request_err.Error())
+		return TarpanResult{}, errors.New(request_err.Error())
 	}
-	/*
-		now = time.Now()
-		&SnmpResult{
-			index:   "",
-			target:  "",
-			results: snmpPacket.Variables,
-			time:    now.Unix(),
-		}
-	*/
+	tarpanResult := m.makeTarpanResult(snmpPacket)
 
-	return snmpPacket.Variables, nil
+	return tarpanResult, nil
 }
 
 func (t *TarpanManager) SetManager(manager *gosnmp.GoSNMP) {
@@ -140,8 +141,8 @@ func (t *TarpanManager) SetManager(manager *gosnmp.GoSNMP) {
 }
 
 func (t *TarpanManager) SetParams(p *RequestParams) {
-	if p.target != "" {
-		t.snmp.Target = p.target
+	if p.address != "" {
+		t.snmp.Target = p.address
 	}
 	if p.port != "" {
 		port, _ := strconv.ParseUint(p.port, 10, 16)
@@ -195,10 +196,11 @@ func getRequestParams(ds *DataSet, idx int) (*RequestParams, error) {
 	}
 
 	requestParams := &RequestParams{
-		target:    address,
-		community: community,
-		version:   version,
-		port:      strconv.Itoa(int(port)),
+		managerIndex: idx,
+		address:      address,
+		community:    community,
+		version:      version,
+		port:         strconv.Itoa(int(port)),
 	}
 
 	return requestParams, nil
@@ -207,46 +209,21 @@ func getRequestParams(ds *DataSet, idx int) (*RequestParams, error) {
 func makeChannel(result_buffer_size int) *Channels {
 	channel := &Channels{
 		semaphoe: make(chan int, ConcurrentProcesses),
-		results:  make(chan SnmpResult, result_buffer_size),
+		results:  make(chan TarpanResult, result_buffer_size),
 	}
 
 	return channel
 }
 
-func getTargetOIDDescription(oid string, oids []OID) (string, error) {
-	for _, o := range oids {
+//func getTargetOIDDescription(oid string, oids []OID) (string, error) {
+func (m *TarpanManager) getTargetOIDDescription(oid string) (string, error) {
+	for _, o := range m.target.OIDs {
 		if o.OID == oid {
 			return o.Description, nil
 		}
 	}
 
 	return "", errors.New("oid not found")
-}
-
-func makeTarpanResult(result SnmpResult) *TarpanResult {
-	var varbinds []VarBind
-	for _, val := range result.results {
-		//n := strings.TrimLeft(val.Name, ".")
-		desc, _ := getTargetOIDDescription(val.Name, result.target.OIDs)
-		v := VarBind{
-			Description: desc,
-			OID:         val.Name,
-			Type:        val.Type,
-			Value:       val.Value,
-			Time:        result.time,
-		}
-		varbinds = append(varbinds, v)
-	}
-	tarpanResult := &TarpanResult{
-		Name:      result.target.Name,
-		Address:   result.target.Address,
-		Port:      result.target.Port,
-		Version:   result.target.Version,
-		Community: result.target.Community,
-		VarBinds:  varbinds,
-	}
-
-	return tarpanResult
 }
 
 func removeNilResult(tarpanResults []*TarpanResult) []*TarpanResult {
@@ -260,24 +237,76 @@ func removeNilResult(tarpanResults []*TarpanResult) []*TarpanResult {
 	return responseResult
 }
 
+func (m *TarpanManager) makeTarpanResult(sp *gosnmp.SnmpPacket) TarpanResult {
+	now := time.Now()
+	var varbinds []VarBind
+	for _, val := range sp.Variables {
+		//n := strings.TrimLeft(val.Name, ".")
+		desc, _ := m.getTargetOIDDescription(val.Name)
+		//asn1ber_name, _ := getAsn1BERName(val.Type)
+		v := VarBind{
+			Description: desc,
+			OID:         val.Name,
+			Type:        val.Type,
+			Value:       val.Value,
+			Time:        now.Unix(),
+		}
+		varbinds = append(varbinds, v)
+	}
+	var version string
+	switch m.snmp.Version {
+	case gosnmp.Version1:
+		version = "1"
+	case gosnmp.Version2c:
+		version = "2c"
+	case gosnmp.Version3:
+		version = "3"
+	default:
+		version = ""
+	}
+	tarpanResult := TarpanResult{
+		Name:      m.target.Name,
+		Address:   m.target.Address,
+		Port:      m.snmp.Port,
+		Version:   version,
+		Community: m.snmp.Community,
+		VarBinds:  varbinds,
+	}
+
+	return tarpanResult
+}
+
 func makeTarpanResults(c *Channels) []*TarpanResult {
 	result_length := len(c.results)
-	tarpanResults := make([]*TarpanResult, result_length)
-	var result SnmpResult
+	tarpanResults := make(TarpanResults, result_length)
 	for i := 0; i < result_length; i++ {
-		result = <-c.results
-		tarpanResults[result.index] = makeTarpanResult(result)
+		tarpanResult := <-c.results
+		tarpanResults[i] = &tarpanResult
 	}
 
 	return removeNilResult(tarpanResults)
 }
 
-func makeManagers(numberOfTargets int) []*TarpanManager {
-	var managers []*TarpanManager
-	for i := 0; i < numberOfTargets; i++ {
-		managers = append(managers, &TarpanManager{
+func makeManagers(ds *DataSet) []*TarpanManager {
+	var manager *TarpanManager
+	var managers TarpanManagers
+	var oids []string
+
+	// Set Target
+	for t_idx := range ds.Targets {
+		// TODO: split oid slice depending on PDU size
+		oids = []string{}
+		for o_idx := range ds.Targets[t_idx].OIDs {
+			oids = append(oids, ds.Targets[t_idx].OIDs[o_idx].OID)
+		}
+		manager = &TarpanManager{
 			snmp: &gosnmp.GoSNMP{},
-		})
+		}
+		err := manager.setTarget(ds, t_idx)
+		if err != nil {
+			log.Println("set target error")
+		}
+		managers = append(managers, manager)
 	}
 
 	return managers
@@ -286,8 +315,9 @@ func makeManagers(numberOfTargets int) []*TarpanManager {
 func Collect(dataset *DataSet) []*TarpanResult {
 	var waitGroup sync.WaitGroup
 	var oids []string
+	var tarpanResults []*TarpanResult
 
-	managers := makeManagers(len(dataset.Targets))
+	managers := makeManagers(dataset)
 	channels := makeChannel(len(dataset.Targets))
 	for t_idx := range dataset.Targets {
 
@@ -298,33 +328,22 @@ func Collect(dataset *DataSet) []*TarpanResult {
 		}
 
 		waitGroup.Add(1)
-		go func(m *TarpanManager, ds *DataSet, idx int, o []string, c *Channels) {
+		go func(m *TarpanManager, o []string, c *Channels) {
+			c.semaphoe <- 0
 			defer func() {
 				waitGroup.Done()
 				<-c.semaphoe
 			}()
-			c.semaphoe <- 0
-			param, param_err := getRequestParams(ds, idx)
-			if param_err != nil {
-				log.Print(param_err)
-				return
-			}
-			results, err := m.Get(param, o)
-			t := time.Now()
+			result, err := m.Get(o)
 			if err != nil {
 				log.Print(err)
 				return
 			}
-			c.results <- SnmpResult{
-				index:   idx,
-				target:  ds.Targets[idx],
-				results: results,
-				time:    t.Unix(),
-			}
-		}(managers[t_idx], dataset, t_idx, oids, channels)
+			c.results <- result
+		}(managers[t_idx], oids, channels)
 	}
 	waitGroup.Wait()
-	tarpanResults := makeTarpanResults(channels)
+	tarpanResults = makeTarpanResults(channels)
 
 	return tarpanResults
 }
