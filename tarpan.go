@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/soniah/gosnmp"
+	g "github.com/soniah/gosnmp"
 )
 
 // Tarpan constants
@@ -82,13 +82,13 @@ type Tarpan interface {
 	makeRequestBody()
 	SetManager()
 	SetParams()
-	Get(params map[string]string, oids []string) ([]gosnmp.SnmpPDU, error)
+	Get(params map[string]string, oids []string) ([]g.SnmpPDU, error)
 	Run()
 }
 
 type TarpanManager struct {
 	target *Target
-	snmp   *gosnmp.GoSNMP
+	snmp   *g.GoSNMP
 }
 
 type TarpanManagers []*TarpanManager
@@ -136,41 +136,41 @@ func (m *TarpanManager) Get(oids []string) (TarpanResult, error) {
 	return tarpanResult, nil
 }
 
-func (t *TarpanManager) SetManager(manager *gosnmp.GoSNMP) {
-	t.snmp = manager
+func (m *TarpanManager) SetManager(manager *g.GoSNMP) {
+	m.snmp = manager
 }
 
-func (t *TarpanManager) SetParams(p *RequestParams) {
+func (m *TarpanManager) SetParams(p *RequestParams) {
 	if p.address != "" {
-		t.snmp.Target = p.address
+		m.snmp.Target = p.address
 	}
 	if p.port != "" {
 		port, _ := strconv.ParseUint(p.port, 10, 16)
-		t.snmp.Port = uint16(port)
+		m.snmp.Port = uint16(port)
 	} else {
-		t.snmp.Port = uint16(PORT)
+		m.snmp.Port = uint16(PORT)
 	}
 	if p.community != "" {
-		t.snmp.Community = p.community
+		m.snmp.Community = p.community
 	} else {
-		t.snmp.Community = COMMUNITY
+		m.snmp.Community = COMMUNITY
 	}
 	if p.version != "" {
 		if p.version == "2c" {
-			t.snmp.Version = gosnmp.Version2c
+			m.snmp.Version = g.Version2c
 		}
 	} else {
-		t.snmp.Version = gosnmp.Version2c
+		m.snmp.Version = g.Version2c
 	}
 	if p.timeout != 0 {
-		t.snmp.Timeout = time.Duration(p.timeout) * time.Second
+		m.snmp.Timeout = time.Duration(p.timeout) * time.Second
 	} else {
-		t.snmp.Timeout = time.Duration(TIMEOUT) * time.Second
+		m.snmp.Timeout = time.Duration(TIMEOUT) * time.Second
 	}
 	if p.retry != 0 {
-		t.snmp.Retries = int(p.retry)
+		m.snmp.Retries = int(p.retry)
 	} else {
-		t.snmp.Retries = RETRY
+		m.snmp.Retries = RETRY
 	}
 }
 
@@ -237,7 +237,7 @@ func removeNilResult(tarpanResults []*TarpanResult) []*TarpanResult {
 	return responseResult
 }
 
-func (m *TarpanManager) makeTarpanResult(sp *gosnmp.SnmpPacket) TarpanResult {
+func (m *TarpanManager) makeTarpanResult(sp *g.SnmpPacket) TarpanResult {
 	now := time.Now()
 	var varbinds []VarBind
 	for _, val := range sp.Variables {
@@ -291,7 +291,7 @@ func makeManagers(ds *DataSet) []*TarpanManager {
 			oids = append(oids, ds.Targets[t_idx].OIDs[o_idx].OID)
 		}
 		manager = &TarpanManager{
-			snmp: &gosnmp.GoSNMP{},
+			snmp: &g.GoSNMP{},
 		}
 		err := manager.setTarget(ds, t_idx)
 		if err != nil {
