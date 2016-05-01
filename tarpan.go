@@ -25,10 +25,10 @@ const (
 
 // SNMP constants
 const (
-	community = "public"
-	port      = 161
-	timeout   = 2
-	retry     = 3
+	COMMUNITY = "public"
+	PORT      = 161
+	TIMEOUT   = 2
+	RETRY     = 3
 	//MaximumPDUBytes = 512
 )
 
@@ -88,6 +88,15 @@ type TarpanManager struct {
 	snmp *gosnmp.GoSNMP
 }
 
+type RequestParams struct {
+	target    string
+	community string
+	version   string
+	port      string
+	timeout   uint8
+	retry     uint8
+}
+
 type SnmpResult struct {
 	index   int
 	target  Target
@@ -100,67 +109,77 @@ type Channels struct {
 	results  chan SnmpResult
 }
 
-func (t *TarpanManager) Get(params map[string]string,
+func (t *TarpanManager) Get(params *RequestParams,
 	oids []string) ([]gosnmp.SnmpPDU, error) {
 	t.SetParams(params)
 	connection_err := t.snmp.Connect()
+	defer t.snmp.Conn.Close()
 	if connection_err != nil {
 		log.Fatalf("Connection error: %")
 		return nil, errors.New(connection_err.Error())
 	}
-	result, request_err := t.snmp.Get(oids)
+	snmpPacket, request_err := t.snmp.Get(oids)
 	if request_err != nil {
 		return nil, errors.New(request_err.Error())
 	}
-	t.snmp.Conn.Close()
+	/*
+		now = time.Now()
+		&SnmpResult{
+			index:   "",
+			target:  "",
+			results: snmpPacket.Variables,
+			time:    now.Unix(),
+		}
+	*/
 
-	return result.Variables, nil
+	return snmpPacket.Variables, nil
 }
 
 func (t *TarpanManager) SetManager(manager *gosnmp.GoSNMP) {
 	t.snmp = manager
 }
 
-func (t *TarpanManager) SetParams(p map[string]string) {
-	if value, ok := p["target"]; ok {
-		t.snmp.Target = value
+func (t *TarpanManager) SetParams(p *RequestParams) {
+	if p.target != "" {
+		t.snmp.Target = p.target
 	}
-	if value, ok := p["port"]; ok {
-		port, _ := strconv.ParseUint(value, 10, 16)
+	if p.port != "" {
+		port, _ := strconv.ParseUint(p.port, 10, 16)
 		t.snmp.Port = uint16(port)
 	} else {
-		t.snmp.Port = uint16(port)
+		t.snmp.Port = uint16(PORT)
 	}
-	if value, ok := p["community"]; ok {
-		t.snmp.Community = value
+	if p.community != "" {
+		t.snmp.Community = p.community
+	} else {
+		t.snmp.Community = COMMUNITY
 	}
-	if value, ok := p["version"]; ok {
-		if value == "2c" {
+	if p.version != "" {
+		if p.version == "2c" {
 			t.snmp.Version = gosnmp.Version2c
 		}
-	}
-	if value, ok := p["timeout"]; ok {
-		sec, _ := strconv.Atoi(value)
-		t.snmp.Timeout = time.Duration(sec) * time.Second
 	} else {
-		t.snmp.Timeout = time.Duration(timeout) * time.Second
+		t.snmp.Version = gosnmp.Version2c
 	}
-	if value, ok := p["retries"]; ok {
-		retries, _ := strconv.Atoi(value)
-		t.snmp.Retries = retries
+	if p.timeout != 0 {
+		t.snmp.Timeout = time.Duration(p.timeout) * time.Second
 	} else {
-		t.snmp.Retries = retry
-
+		t.snmp.Timeout = time.Duration(TIMEOUT) * time.Second
+	}
+	if p.retry != 0 {
+		t.snmp.Retries = int(p.retry)
+	} else {
+		t.snmp.Retries = RETRY
 	}
 }
 
-func getRequestParams(ds *DataSet, idx int) (map[string]string, error) {
+func getRequestParams(ds *DataSet, idx int) (*RequestParams, error) {
 	var address string
 	err := validateIP(ds.Targets[idx].Address)
 	if err == nil {
 		address = ds.Targets[idx].Address
 	} else {
-		return map[string]string{}, err
+		return &RequestParams{}, err
 	}
 	community := ds.Targets[idx].Community
 	if community == "" {
@@ -175,14 +194,14 @@ func getRequestParams(ds *DataSet, idx int) (map[string]string, error) {
 		port = ds.Default.Port
 	}
 
-	request_body := map[string]string{
-		"target":    address,
-		"community": community,
-		"version":   version,
-		"port":      strconv.Itoa(int(port)),
+	requestParams := &RequestParams{
+		target:    address,
+		community: community,
+		version:   version,
+		port:      strconv.Itoa(int(port)),
 	}
 
-	return request_body, nil
+	return requestParams, nil
 }
 
 func makeChannel(result_buffer_size int) *Channels {
