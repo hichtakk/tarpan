@@ -2,10 +2,8 @@ package tarpan
 
 import (
 	"errors"
-	"strconv"
-	//"strings"
-	//"runtime"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -81,10 +79,12 @@ type VarBind struct {
 }
 
 type Tarpan interface {
-	makeRequestBody()
+	setTarget(ds *DataSet, target_index int)
+	Get(oids []string)
 	SetManager()
-	SetParams()
-	Get(params map[string]string, oids []string) ([]g.SnmpPDU, error)
+	setParams(p *RequestParams)
+	getTargetOIDDescription(oid string)
+	makeTarpanResult(sp *g.SnmpPacket)
 	Run()
 }
 
@@ -116,7 +116,7 @@ func (m *TarpanManager) setTarget(ds *DataSet, target_index int) error {
 		log.Error(param_err)
 		errors.New(param_err.Error())
 	}
-	m.SetParams(params)
+	m.setParams(params)
 	m.target = &ds.Targets[target_index]
 
 	return nil
@@ -142,7 +142,7 @@ func (m *TarpanManager) SetManager(manager *g.GoSNMP) {
 	m.snmp = manager
 }
 
-func (m *TarpanManager) SetParams(p *RequestParams) {
+func (m *TarpanManager) setParams(p *RequestParams) {
 	if p.address != "" {
 		m.snmp.Target = p.address
 	}
@@ -282,15 +282,9 @@ func makeTarpanResults(c *Channels) []*TarpanResult {
 func makeManagers(ds *DataSet) []*TarpanManager {
 	var manager *TarpanManager
 	var managers TarpanManagers
-	var oids []string
 
 	// Set Target
 	for t_idx := range ds.Targets {
-		// TODO: split oid slice depending on PDU size
-		oids = []string{}
-		for o_idx := range ds.Targets[t_idx].OIDs {
-			oids = append(oids, ds.Targets[t_idx].OIDs[o_idx].OID)
-		}
 		manager = &TarpanManager{
 			snmp: &g.GoSNMP{},
 		}
@@ -340,9 +334,10 @@ func Collect(dataset *DataSet) []*TarpanResult {
 	return tarpanResults
 }
 
-func Run(target string, output string, debug bool) (int, error) {
+func Run(target string, output_type string, debug bool) (int, error) {
 	var err error
 
+	// setup logger
 	log.SetOutput(os.Stderr)
 	if debug == true {
 		log.SetLevel(log.DebugLevel)
@@ -350,10 +345,10 @@ func Run(target string, output string, debug bool) (int, error) {
 		log.SetLevel(log.WarnLevel)
 	}
 
-	// Load targets
+	// load targets
 	dataset, loadErr := loadConfig(target)
 	if loadErr != nil {
-		log.Error("err message:")
+		log.Error(loadErr)
 		return ExitCodeConfError, loadErr
 	}
 
@@ -361,7 +356,7 @@ func Run(target string, output string, debug bool) (int, error) {
 	tr := Collect(dataset)
 
 	// output
-	Write(output, tr)
+	Write(output_type, tr)
 
 	return ExitCodeOK, err
 }
