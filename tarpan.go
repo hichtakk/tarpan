@@ -2,12 +2,14 @@ package tarpan
 
 import (
 	"errors"
-	"log"
 	"strconv"
 	//"strings"
+	//"runtime"
+	"os"
 	"sync"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	g "github.com/soniah/gosnmp"
 )
 
@@ -111,7 +113,7 @@ type Channels struct {
 func (m *TarpanManager) setTarget(ds *DataSet, target_index int) error {
 	params, param_err := getRequestParams(ds, target_index)
 	if param_err != nil {
-		log.Print(param_err)
+		log.Error(param_err)
 		errors.New(param_err.Error())
 	}
 	m.SetParams(params)
@@ -124,7 +126,7 @@ func (m *TarpanManager) Get(oids []string) (TarpanResult, error) {
 	connection_err := m.snmp.Connect()
 	defer m.snmp.Conn.Close()
 	if connection_err != nil {
-		log.Fatalf("Connection error: %")
+		log.Error("Connection error: %")
 		return TarpanResult{}, errors.New(connection_err.Error())
 	}
 	snmpPacket, request_err := m.snmp.Get(oids)
@@ -215,7 +217,6 @@ func makeChannel(result_buffer_size int) *Channels {
 	return channel
 }
 
-//func getTargetOIDDescription(oid string, oids []OID) (string, error) {
 func (m *TarpanManager) getTargetOIDDescription(oid string) (string, error) {
 	for _, o := range m.target.OIDs {
 		if o.OID == oid {
@@ -295,7 +296,7 @@ func makeManagers(ds *DataSet) []*TarpanManager {
 		}
 		err := manager.setTarget(ds, t_idx)
 		if err != nil {
-			log.Println("set target error")
+			log.Error("set target error")
 		}
 		managers = append(managers, manager)
 	}
@@ -327,7 +328,7 @@ func Collect(dataset *DataSet) []*TarpanResult {
 			}()
 			result, err := m.Get(o)
 			if err != nil {
-				log.Print(err)
+				log.Error(err)
 				return
 			}
 			c.results <- result
@@ -342,9 +343,17 @@ func Collect(dataset *DataSet) []*TarpanResult {
 func Run(target string, output string, debug bool) (int, error) {
 	var err error
 
+	log.SetOutput(os.Stderr)
+	if debug == true {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(log.WarnLevel)
+	}
+
 	// Load targets
 	dataset, loadErr := loadConfig(target)
 	if loadErr != nil {
+		log.Error("err message:")
 		return ExitCodeConfError, loadErr
 	}
 
