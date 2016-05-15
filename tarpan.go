@@ -81,7 +81,6 @@ type VarBind struct {
 type Tarpan interface {
 	setTarget(ds *DataSet, target_index int)
 	Get(oids []string)
-	SetManager()
 	setParams(p *RequestParams)
 	getTargetOIDDescription(oid string)
 	makeTarpanResult(sp *g.SnmpPacket)
@@ -136,10 +135,6 @@ func (m *TarpanManager) Get(oids []string) (TarpanResult, error) {
 	tarpanResult := m.makeTarpanResult(snmpPacket)
 
 	return tarpanResult, nil
-}
-
-func (m *TarpanManager) SetManager(manager *g.GoSNMP) {
-	m.snmp = manager
 }
 
 func (m *TarpanManager) setParams(p *RequestParams) {
