@@ -21,7 +21,7 @@ func main() {
 	}
 	exit, err := tarpan.Run(*target, *output, *debug)
 	if err != nil {
-		fmt.Println("hoge")
+		fmt.Println(err)
 	}
 	os.Exit(exit)
 }

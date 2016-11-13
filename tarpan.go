@@ -34,11 +34,11 @@ const (
 
 // JSON structure definition
 type DataSet struct {
-	Default Defaults `json:"defaults"`
+	Global  Global   `json:"global"`
 	Targets []Target `json:"targets"`
 }
 
-type Defaults struct {
+type Global struct {
 	Port      uint16 `json:"port"`
 	Version   string `json:"version"`
 	Community string `json:"community"`
@@ -181,15 +181,15 @@ func getRequestParams(ds *DataSet, idx int) (*RequestParams, error) {
 	}
 	community := ds.Targets[idx].Community
 	if community == "" {
-		community = ds.Default.Community
+		community = ds.Global.Community
 	}
 	version := ds.Targets[idx].Version
 	if version == "" {
-		version = ds.Default.Version
+		version = ds.Global.Version
 	}
 	port := ds.Targets[idx].Port
 	if port == 0 {
-		port = ds.Default.Port
+		port = ds.Global.Port
 	}
 
 	requestParams := &RequestParams{

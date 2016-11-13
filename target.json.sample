@@ -1,0 +1,41 @@
+{
+    "global": {
+        "port": 161,
+        "version": "2c",
+        "community": "public"
+    },
+    "targets": [
+        {
+            "name": "localhost",
+            "address": "127.0.0.1",
+            "oids": [
+                {
+                    "description": "Sample Description",
+                    "oid": ".1.3.6.1.2.1.1.4.0"
+                }
+            ]
+        },
+        {
+            "name": "localhost2",
+            "address": "127.0.0.1",
+            "port": 1611,
+            "oids": [
+                {
+                    "description": "Sample Description",
+                    "oid": ".1.3.6.1.2.1.1.4.0"
+                }
+            ]
+        },
+        {
+            "name": "localhost3",
+            "address": "127.0.0.1",
+            "port": 161,
+            "oids": [
+                {
+                    "description": "Sample Description",
+                    "oid": ".1.3.6.1.2.1.1.4.0"
+                }
+            ]
+        }
+    ]
+}
