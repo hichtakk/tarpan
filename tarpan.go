@@ -3,7 +3,6 @@ package tarpan
 import (
 	"errors"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
