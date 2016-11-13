@@ -99,7 +99,7 @@ type RequestParams struct {
 	address      string
 	community    string
 	version      string
-	port         string
+	port         uint16
 	timeout      uint8
 	retry        uint8
 }
@@ -141,9 +141,8 @@ func (m *TarpanManager) setParams(p *RequestParams) {
 	if p.address != "" {
 		m.snmp.Target = p.address
 	}
-	if p.port != "" {
-		port, _ := strconv.ParseUint(p.port, 10, 16)
-		m.snmp.Port = uint16(port)
+	if p.port != 0 {
+		m.snmp.Port = p.port
 	} else {
 		m.snmp.Port = uint16(PORT)
 	}
@@ -189,11 +188,7 @@ func getRequestParams(ds *DataSet, idx int) (*RequestParams, error) {
 	}
 	port := ds.Targets[idx].Port
 	if port == 0 {
-		if ds.Global.Port == 0 {
-			port = PORT
-		} else {
-			port = ds.Global.Port
-		}
+		port = ds.Global.Port
 	}
 
 	requestParams := &RequestParams{
@@ -201,7 +196,7 @@ func getRequestParams(ds *DataSet, idx int) (*RequestParams, error) {
 		address:      address,
 		community:    community,
 		version:      version,
-		port:         strconv.Itoa(int(port)),
+		port:         port,
 	}
 
 	return requestParams, nil
