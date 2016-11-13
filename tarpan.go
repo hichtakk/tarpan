@@ -189,7 +189,11 @@ func getRequestParams(ds *DataSet, idx int) (*RequestParams, error) {
 	}
 	port := ds.Targets[idx].Port
 	if port == 0 {
-		port = ds.Global.Port
+		if ds.Global.Port == 0 {
+			port = PORT
+		} else {
+			port = ds.Global.Port
+		}
 	}
 
 	requestParams := &RequestParams{
