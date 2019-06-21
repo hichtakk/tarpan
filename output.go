@@ -37,7 +37,7 @@ func sensuWriter(tr []*TarpanResult) {
 func jsonWriter(tr []*TarpanResult) {
 	b, err := json.Marshal(tr)
 	if err != nil {
-		fmt.Println("json err:", err)
+		fmt.Println("json error:", err)
 	}
 	fmt.Println(string(b))
 }
